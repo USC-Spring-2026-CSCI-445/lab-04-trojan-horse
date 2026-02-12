@@ -17,6 +17,10 @@ class PController:
         assert u_min < u_max, "u_min should be less than u_max"
         # Initialize variables here
         ######### Your code starts here #########
+        self.kP = kP # this is gain
+        self.u_max=u_max  #setting the clamp
+        self.u_min=u_min
+        self.t_prev=0.0
 
         ######### Your code ends here #########
 
@@ -27,6 +31,10 @@ class PController:
 
         # Compute control action here
         ######### Your code starts here #########
+        u = self.kP * err #formula from the slides
+        u = max(self.u_min, min(u, self.u_max))
+        self.t_prev = t
+        return u
 
         ######### Your code ends here #########
 
@@ -41,6 +49,12 @@ class PDController:
         assert u_min < u_max, "u_min should be less than u_max"
         # Initialize variables here
         ######### Your code starts here #########
+        self.kP = kP
+        self.kD = kD
+        self.u_max = u_max
+        self.u_min = u_min
+        self.t_prev = 0.0
+        self.err_prev = 0
 
         ######### Your code ends here #########
 
@@ -51,7 +65,12 @@ class PDController:
 
         # Compute control action here
         ######### Your code starts here #########
-
+        err_dot = (err - self.err_prev)/ dt
+        u = self.kP * err + self.kD * err_dot
+        u = max(self.u_min, min(u, self.u_max))
+        self.t_prev = t
+        self.err_prev = err
+        return u
         ######### Your code ends here #########
 
 
@@ -66,7 +85,11 @@ class RobotController:
 
         # Define PD controller for wall following here
         ######### Your code starts here #########
-
+        kP = 0.6
+        kD = 0.8
+        #self.controller = PController(kP=kP, u_min=-2.84, u_max=2.84)
+        self.controller = PDController(kP=kP, kD=kD, u_min=-1.0, u_max=1.0)
+        self.base_linear_velocity = 0.15
         ######### Your code ends here #########
 
         self.desired_distance = desired_distance  # Desired distance from the wall
@@ -76,7 +99,9 @@ class RobotController:
         raw = state.cliff
         ######### Your code starts here #########
         # conversion from raw sensor values to distance. Use equation from Lab 2
-
+        a = 7456.6
+        b = -1.708
+        distance = a *(raw ** b)
         ######### Your code ends here #########
         # print(f"raw: {raw}\tdistance: {distance}")
         self.ir_distance = distance
@@ -96,7 +121,19 @@ class RobotController:
 
             # using PD controller, compute and send motor commands
             ######### Your code starts here #########
+            error = self.ir_distance - (self.desired_distance + 0.10) #error calc
+            current_time = time()
+            u = self.controller.control(error, current_time) # adjusting speed as needed
+            if self.ir_distance < (self.desired_distance + 0.10):
+                ctrl_msg.linear.x = 0.06
+                u = max(u,-0.6)
+            elif self.ir_distance > (self.desired_distance + 0.2):
+                ctrl_msg.linear.x = 0.11
+                u = min(u, 0.8)
+            else:
+                ctrl_msg.linear.x = self.base_linear_velocity
 
+            ctrl_msg.angular.z = u
             ######### Your code ends here #########
 
             self.robot_ctrl_pub.publish(ctrl_msg)
